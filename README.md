@@ -1,3 +1,9 @@
+## 네트워크 프로젝트 실행
+
+서버 접속 관리·역할 선택 처리와 Swing 접속 화면을 추가했습니다. Eclipse 실행 방법은 [접속 기능 실행 안내](docs/server-connection.md), 메시지 형식은 [통신 규칙](docs/protocol.md)을 참고해주세요.
+
+원본 게임은 `src/java/game`, 추가한 통신 코드는 `src/java/pacman`에 있습니다. 아래는 원본 프로젝트 안내입니다.
+
 <h1 align="center">
   <br>
   <a href=""><img src="https://i.pinimg.com/originals/b4/ee/c4/b4eec4d093adbe9d8a3cbb40d024836a.png" width="450"></a>
