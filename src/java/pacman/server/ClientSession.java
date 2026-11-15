@@ -14,6 +14,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 final class ClientSession {
     final long id;
     String role;
+    // 준비 버튼 눌렀는지 표시
     boolean ready;
     private final Socket socket;
     private final PacmanServer server;

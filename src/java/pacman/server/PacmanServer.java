@@ -16,7 +16,9 @@ public class PacmanServer implements AutoCloseable {
     private volatile boolean closed;
     private int nextPlayerId = 1;
     private int connectionVersion;
+    // 몇 번째 판인지 세려고 만든 변수
     private int roundId;
+    // 게임 시작하면 역할을 다시 못 고르게 확인
     private boolean gameRunning;
 
     public PacmanServer(String address, int port) throws IOException {
@@ -85,6 +87,7 @@ public class PacmanServer implements AutoCloseable {
             }
             selectRole(client, parts[1]);
         } else if (parts.length == 1 && parts[0].equals("READY")) {
+            // 준비 버튼 눌렀을 때
             selectReady(client);
         } else if (parts.length == 1 && parts[0].equals("PING")) {
             client.send(Json.object("type", "PONG"));
@@ -97,6 +100,7 @@ public class PacmanServer implements AutoCloseable {
 
     private void selectRole(ClientSession client, String role) {
         if (gameRunning) {
+            // 게임 중에는 역할 바꾸면 안 되게 하기
             client.send(error("INVALID_PHASE"));
             return;
         }
@@ -122,11 +126,13 @@ public class PacmanServer implements AutoCloseable {
 
     private void selectReady(ClientSession client) {
         if (gameRunning || client.role == null) {
+            // 역할 안 고른 상태에서는 준비 못 하게 하기
             client.send(error("INVALID_PHASE"));
             return;
         }
 
         client.ready = true;
+        // 준비 상태가 바뀌면 상대 화면에도 바로 보내기
         sendLobby();
         startWhenReady();
     }
@@ -141,7 +147,7 @@ public class PacmanServer implements AutoCloseable {
                 || !first.ready || !second.ready) return;
 
         gameRunning = true;
-        roundId++;
+        roundId++; // 몇 번째 판인지 1씩 늘리기
         broadcast(Json.object("type", "GAME_START", "roundId", roundId,
                 "phase", "PLAYING", "remainingMs", 180000, "players", players()));
         System.out.println("게임 시작 / " + roundId + "라운드");
@@ -153,6 +159,7 @@ public class PacmanServer implements AutoCloseable {
     }
 
     private List<Map<String, Object>> players() {
+        // 시작할 때도 서로 역할을 확인할 수 있게 정리
         List<Map<String, Object>> result = new ArrayList<>();
         for (ClientSession client : clients) {
             result.add(Json.object("id", client.id, "role", client.role, "ready", client.ready));
