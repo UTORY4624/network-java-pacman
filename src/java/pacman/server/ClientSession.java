@@ -14,6 +14,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 final class ClientSession {
     final long id;
     String role;
+    boolean ready;
     private final Socket socket;
     private final PacmanServer server;
     private final BlockingQueue<String> outgoing = new ArrayBlockingQueue<>(64);

@@ -38,23 +38,32 @@ public class ServerTests {
                 check(third.reader.readLine() == null, "세 번째 연결 종료");
             }
 
+            first.send("READY");
+            check(first.await("INVALID_PHASE").contains("ERROR"), "역할 선택 전 준비 막기");
             first.send("ROLE PACMAN");
             check(first.await("\"role\":\"PACMAN\"").contains("\"id\":1"), "팩맨 선택");
             second.send("ROLE PACMAN");
             check(second.await("ROLE_TAKEN").contains("ERROR"), "같은 역할 중복 방지");
             second.send("ROLE GHOST");
             String lobby = second.await("\"role\":\"GHOST\"");
-            check(lobby.contains("\"id\":1,\"role\":\"PACMAN\"")
-                    && lobby.contains("\"id\":2,\"role\":\"GHOST\""), "양쪽 역할 공유");
-
-            first.send("ROLE GHOST");
-            check(first.await("ROLE_TAKEN").contains("ERROR"), "상대 역할로 변경 막기");
+            check(lobby.contains("\"id\":1,\"role\":\"PACMAN\",\"ready\":false")
+                    && lobby.contains("\"id\":2,\"role\":\"GHOST\",\"ready\":false"), "양쪽 역할 공유");
             first.send("ROLE UNKNOWN");
             check(first.await("INVALID_ROLE").contains("ERROR"), "잘못된 역할 처리");
             first.send("ROLE");
             check(first.await("BAD_COMMAND").contains("ERROR"), "역할 없이 보낸 요청 처리");
+
+            first.send("READY");
+            check(first.await("\"ready\":true").contains("\"id\":1"), "첫 번째 준비 상태 공유");
+            first.expectNoMessage();
+            second.send("READY");
+            check(first.await("GAME_START").contains("\"roundId\":1"), "두 명 준비 후 첫 번째 시작 안내");
+            check(second.await("GAME_START").contains("\"roundId\":1"), "두 명 준비 후 두 번째 시작 안내");
+            first.expectNoMessage();
+            first.send("ROLE GHOST");
+            check(first.await("INVALID_PHASE").contains("ERROR"), "진행 중 역할 변경 막기");
             first.send("READY 1");
-            check(first.await("BAD_COMMAND").contains("ERROR"), "현재 범위 밖 명령 처리");
+            check(first.await("BAD_COMMAND").contains("ERROR"), "준비 명령 인자 처리");
             first.send("MOVE 1 RIGHT");
             check(first.await("BAD_COMMAND").contains("ERROR"), "이동 명령 처리 범위 확인");
 
@@ -66,7 +75,9 @@ public class ServerTests {
 
             second.send("QUIT");
             check(first.await("PLAYER_LEFT").contains("\"playerId\":2"), "상대 종료 알림");
-            check(!first.await("LOBBY").contains("\"id\":2"), "종료한 사람 목록에서 제외");
+            String afterLeave = first.await("LOBBY");
+            check(!afterLeave.contains("\"id\":2") && afterLeave.contains("\"ready\":false"),
+                    "상대 종료 후 준비 상태 초기화");
             first.send("ROLE GHOST");
             check(first.await("LOBBY").contains("\"role\":\"GHOST\""), "비어 있는 역할로 변경");
 
@@ -136,6 +147,18 @@ public class ServerTests {
                 if (message.contains(expected)) return message;
             }
             throw new AssertionError("응답 시간 초과 / " + expected);
+        }
+
+        void expectNoMessage() throws IOException {
+            socket.setSoTimeout(250);
+            try {
+                String message = reader.readLine();
+                if (message != null) throw new AssertionError("아직 시작하면 안 되는 메시지 / " + message);
+            } catch (java.net.SocketTimeoutException expected) {
+                // 한 명만 준비한 상태에서는 시작 메시지가 오지 않는 것이 정상
+            } finally {
+                socket.setSoTimeout(3000);
+            }
         }
 
         @Override
