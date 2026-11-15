@@ -143,17 +143,21 @@ public class PacmanServer implements AutoCloseable {
         gameRunning = true;
         roundId++;
         broadcast(Json.object("type", "GAME_START", "roundId", roundId,
-                "phase", "PLAYING", "remainingMs", 180000));
+                "phase", "PLAYING", "remainingMs", 180000, "players", players()));
         System.out.println("게임 시작 / " + roundId + "라운드");
     }
 
     private void sendLobby() {
-        List<Map<String, Object>> players = new ArrayList<>();
-        for (ClientSession client : clients) {
-            players.add(Json.object("id", client.id, "role", client.role, "ready", client.ready));
-        }
         broadcast(Json.object("type", "LOBBY", "phase", gameRunning ? "PLAYING" : "LOBBY",
-                "players", players));
+                "players", players()));
+    }
+
+    private List<Map<String, Object>> players() {
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (ClientSession client : clients) {
+            result.add(Json.object("id", client.id, "role", client.role, "ready", client.ready));
+        }
+        return result;
     }
 
     private void broadcast(Object message) {

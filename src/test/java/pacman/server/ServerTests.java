@@ -57,7 +57,9 @@ public class ServerTests {
             check(first.await("\"ready\":true").contains("\"id\":1"), "첫 번째 준비 상태 공유");
             first.expectNoMessage();
             second.send("READY");
-            check(first.await("GAME_START").contains("\"roundId\":1"), "두 명 준비 후 첫 번째 시작 안내");
+            String firstStart = first.await("GAME_START");
+            check(firstStart.contains("\"roundId\":1") && firstStart.contains("\"role\":\"PACMAN\"")
+                    && firstStart.contains("\"role\":\"GHOST\""), "두 명 준비 후 첫 번째 시작 안내");
             check(second.await("GAME_START").contains("\"roundId\":1"), "두 명 준비 후 두 번째 시작 안내");
             first.expectNoMessage();
             first.send("ROLE GHOST");
