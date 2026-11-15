@@ -72,8 +72,10 @@ PING
 서로 다른 역할의 두 사용자가 모두 준비하면 서버는 한 번만 `GAME_START`를 보낸다. 이후 바로 첫 `GAME_STATE`를 보낸다.
 
 ```json
-{"type":"GAME_START","roundId":1,"phase":"PLAYING","remainingMs":180000}
+{"type":"GAME_START","roundId":1,"phase":"PLAYING","remainingMs":180000,"players":[{"id":1,"role":"PACMAN","ready":true},{"id":2,"role":"GHOST","ready":true}]}
 ```
+
+`players`에는 시작한 두 사용자의 `id`, `role`, `ready` 상태를 넣는다. 클라이언트는 이 목록에서 본인의 역할과 상대 역할을 다시 확인할 수 있다.
 
 ### 게임 상태
 
