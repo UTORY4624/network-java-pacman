@@ -66,6 +66,12 @@ final class ClientSession {
         int ch;
         while ((ch = reader.read()) != -1) {
             if (ch == '\n') return line.toString();
+            if (ch == '\r') {
+                // Windows에서 보내는 CRLF의 CR은 메시지 길이에 넣지 않기
+                reader.mark(1);
+                if (reader.read() == '\n') return line.toString();
+                reader.reset();
+            }
             if (line.length() >= 256) throw new IOException("Command exceeds 256 characters");
             line.append((char) ch);
         }

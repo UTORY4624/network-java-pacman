@@ -18,6 +18,7 @@ public class ConnectionTests {
     public static void main(String[] args) throws Exception {
         connectionResults();
         heartbeat();
+        responseOrder();
         cancelWhileWaiting();
         invalidServer();
         System.out.println("PASS / 접속 화면 통신 테스트 " + checks + "개 통과");
@@ -69,7 +70,7 @@ public class ConnectionTests {
                 try (Socket socket = server.accept()) {
                     socket.setSoTimeout(13000);
                     PrintWriter writer = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);
-                    writer.println("{\"type\":\"WELCOME\",\"playerId\":1}");
+                    writer.println("{ \"playerId\" : 1, \"type\" : \"WELCOME\" }");
                     BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
                     received.set(reader.readLine());
                     writer.println("{\"type\":\"PONG\"}");
@@ -106,6 +107,25 @@ public class ConnectionTests {
             client.close();
             check(result.closed.await(3, TimeUnit.SECONDS) && ended.await(3, TimeUnit.SECONDS), "취소하면 소켓 정리");
             check(result.connected.getCount() == 1, "취소한 접속의 성공 알림 방지");
+            peer.join(3000);
+        }
+    }
+
+    private static void responseOrder() throws Exception {
+        try (ServerSocket server = new ServerSocket(0);
+             ServerConnection client = new ServerConnection()) {
+            Thread peer = new Thread(() -> {
+                try (Socket socket = server.accept()) {
+                    PrintWriter writer = new PrintWriter(new OutputStreamWriter(
+                            socket.getOutputStream(), StandardCharsets.UTF_8), true);
+                    writer.println("{ \"code\" : \"SERVER_FULL\", \"type\" : \"ERROR\" }");
+                } catch (Exception ignored) { }
+            });
+            peer.start();
+            Result result = new Result();
+            client.connect("127.0.0.1", server.getLocalPort(), result);
+            check(result.closed.await(3, TimeUnit.SECONDS), "필드 순서가 다른 정원 초과 응답");
+            check(result.connected.getCount() == 1 && result.message.contains("두 명"), "오류 코드로 정원 초과 확인");
             peer.join(3000);
         }
     }

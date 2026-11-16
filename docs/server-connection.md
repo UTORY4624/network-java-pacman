@@ -10,6 +10,8 @@
 
 접속 화면은 연결 상태까지만 표시한다. 역할 선택은 서버 명령으로 처리하며, 역할 선택 화면·준비·게임 시작·이동 동기화는 다음 작업이다. 현재 접속 화면에서 원본 게임으로 넘어가지는 않는다.
 
+이번 브랜치의 `LOBBY`는 접속한 사용자와 역할만 보낸다. [통신 규약](protocol.md)에 있는 `phase`, `ready` 필드와 준비·게임 시작 처리는 #30 범위에서 추가한다.
+
 ## Eclipse에서 실행
 
 1. `File → Import → General → Existing Projects into Workspace`에서 `network-java-pacman` 폴더를 가져온다. `Copy projects into workspace`는 체크하지 않는다. 이미 가져온 프로젝트는 `Refresh`한다.

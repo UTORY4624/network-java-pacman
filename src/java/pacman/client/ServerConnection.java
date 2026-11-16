@@ -49,11 +49,13 @@ public class ServerConnection implements AutoCloseable {
 
             // 서버에서 접속을 허용했다는 응답을 받아야 성공으로 표시
             String firstMessage = reader.readLine();
-            if (firstMessage != null && firstMessage.contains("\"code\":\"SERVER_FULL\"")) {
+            String type = jsonText(firstMessage, "type");
+            String code = jsonText(firstMessage, "code");
+            if ("ERROR".equals(type) && "SERVER_FULL".equals(code)) {
                 message = "이미 두 명이 접속 중이에요. 잠시 후 다시 시도해주세요.";
                 return;
             }
-            if (firstMessage == null || !firstMessage.startsWith("{\"type\":\"WELCOME\",")) {
+            if (!"WELCOME".equals(type)) {
                 message = "팩맨 서버의 접속 응답을 확인할 수 없어요.";
                 return;
             }
@@ -89,6 +91,39 @@ public class ServerConnection implements AutoCloseable {
         } catch (IOException e) {
             close();
         }
+    }
+
+    private static String jsonText(String message, String field) {
+        // JSON 필드 순서나 공백이 달라도 접속 응답을 확인할 수 있게 하기
+        if (message == null) return null;
+        int position = 0;
+        while (position < message.length()) {
+            int keyStart = message.indexOf('"', position);
+            if (keyStart < 0) return null;
+            int keyEnd = message.indexOf('"', keyStart + 1);
+            if (keyEnd < 0) return null;
+
+            int colon = keyEnd + 1;
+            while (colon < message.length() && Character.isWhitespace(message.charAt(colon))) colon++;
+            if (colon >= message.length() || message.charAt(colon) != ':') return null;
+            colon++;
+            while (colon < message.length() && Character.isWhitespace(message.charAt(colon))) colon++;
+
+            if (colon >= message.length()) return null;
+            if (message.charAt(colon) == '"') {
+                int valueEnd = message.indexOf('"', colon + 1);
+                if (valueEnd < 0) return null;
+                if (message.substring(keyStart + 1, keyEnd).equals(field)) {
+                    return message.substring(colon + 1, valueEnd);
+                }
+                position = valueEnd + 1;
+            } else {
+                if (message.substring(keyStart + 1, keyEnd).equals(field)) return null;
+                int comma = message.indexOf(',', colon);
+                position = comma < 0 ? message.length() : comma + 1;
+            }
+        }
+        return null;
     }
 
     @Override

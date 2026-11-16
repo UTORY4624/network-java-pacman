@@ -87,6 +87,18 @@ public class ServerTests {
             }
             first.send("PING");
             check(first.await("PONG").contains("PONG"), "상대가 나간 뒤에도 서버 응답");
+
+            try (TestClient windowsClient = new TestClient(server.getPort())) {
+                windowsClient.await("WELCOME");
+                char[] command = new char[256];
+                Arrays.fill(command, ' ');
+                command[0] = 'P';
+                command[1] = 'I';
+                command[2] = 'N';
+                command[3] = 'G';
+                windowsClient.sendRaw(new String(command) + "\r\n");
+                check(windowsClient.await("PONG").contains("PONG"), "256자 CRLF 명령 처리");
+            }
         } finally {
             server.close();
             serverThread.join(3000);
