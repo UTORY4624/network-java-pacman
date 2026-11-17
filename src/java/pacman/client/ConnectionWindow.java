@@ -1,12 +1,14 @@
 package pacman.client;
 
 import java.awt.BorderLayout;
+import java.awt.CardLayout;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.util.Map;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JFrame;
@@ -22,7 +24,10 @@ public class ConnectionWindow extends JFrame {
     private final JTextField portField = new JTextField("5555", 20);
     private final JButton connectButton = new JButton("접속하기");
     private final JLabel statusLabel = new JLabel("서버 주소와 포트를 입력하고 접속해주세요.");
+    private final CardLayout cards = new CardLayout();
+    private final JPanel screens = new JPanel(cards);
     private ServerConnection connection;
+    private LobbyPanel lobby;
 
     public ConnectionWindow() {
         super("팩맨 서버 접속");
@@ -57,7 +62,8 @@ public class ConnectionWindow extends JFrame {
         fields.add(connectButton, layout);
         panel.add(fields, BorderLayout.CENTER);
         panel.add(statusLabel, BorderLayout.SOUTH);
-        setContentPane(panel);
+        screens.add(panel, "connect");
+        setContentPane(screens);
         getRootPane().setDefaultButton(connectButton);
 
         connectButton.addActionListener(event -> clickConnect());
@@ -111,14 +117,23 @@ public class ConnectionWindow extends JFrame {
             }
 
             @Override
+            public void messageReceived(Map<String, Object> message) {
+                SwingUtilities.invokeLater(() -> {
+                    if (connection != attempt) return;
+                    if ("WELCOME".equals(message.get("type"))) {
+                        showLobby((Long) message.get("playerId"), attempt);
+                    } else if (lobby != null) {
+                        lobby.receive(message);
+                    }
+                });
+            }
+
+            @Override
             public void disconnected(String message) {
                 SwingUtilities.invokeLater(() -> {
                     // 취소한 접속의 응답이 새 접속 화면을 바꾸지 않게 확인
                     if (connection != attempt) return;
-                    connection = null;
-                    setFieldsEnabled(true);
-                    connectButton.setText("접속하기");
-                    statusLabel.setText(message);
+                    showConnect(message);
                 });
             }
         });
@@ -130,9 +145,29 @@ public class ConnectionWindow extends JFrame {
             connection = null;
             previous.close();
         }
+        showConnect("연결을 해제했어요.");
+    }
+
+    private void showLobby(long playerId, ServerConnection attempt) {
+        lobby = new LobbyPanel(playerId, attempt::send, this::disconnect);
+        screens.add(lobby, "lobby");
+        cards.show(screens, "lobby");
+        getRootPane().setDefaultButton(null);
+        setSize(Math.max(getWidth(), screens.getPreferredSize().width),
+                Math.max(getHeight(), screens.getPreferredSize().height + getInsets().top + getInsets().bottom));
+    }
+
+    private void showConnect(String message) {
+        connection = null;
+        cards.show(screens, "connect");
+        if (lobby != null) {
+            screens.remove(lobby);
+            lobby = null;
+        }
+        getRootPane().setDefaultButton(connectButton);
         setFieldsEnabled(true);
         connectButton.setText("접속하기");
-        statusLabel.setText("연결을 해제했어요.");
+        statusLabel.setText(message);
     }
 
     private void setFieldsEnabled(boolean enabled) {

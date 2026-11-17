@@ -11,6 +11,7 @@ import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -19,15 +20,17 @@ public class ServerConnection implements AutoCloseable {
     public interface Listener {
         void connected();
         void disconnected(String message);
+        default void messageReceived(Map<String, Object> message) { }
     }
 
     private final Socket socket = new Socket();
-    private final ScheduledExecutorService heartbeat = Executors.newSingleThreadScheduledExecutor(task -> {
-        Thread thread = new Thread(task, "client-ping");
+    private final ScheduledExecutorService outgoing = Executors.newSingleThreadScheduledExecutor(task -> {
+        Thread thread = new Thread(task, "client-write");
         thread.setDaemon(true);
         return thread;
     });
     private volatile boolean closed;
+    private BufferedWriter output;
 
     public void connect(String host, int port, Listener listener) {
         // 접속을 기다리는 동안에도 버튼이 눌리게 별도 스레드로 실행
@@ -49,13 +52,13 @@ public class ServerConnection implements AutoCloseable {
 
             // 서버에서 접속을 허용했다는 응답을 받아야 성공으로 표시
             String firstMessage = reader.readLine();
-            String type = jsonText(firstMessage, "type");
-            String code = jsonText(firstMessage, "code");
-            if ("ERROR".equals(type) && "SERVER_FULL".equals(code)) {
+            Map<String, Object> welcome = firstMessage == null ? null : ServerJson.parse(firstMessage);
+            Object type = welcome == null ? null : welcome.get("type");
+            if ("ERROR".equals(type) && "SERVER_FULL".equals(welcome.get("code"))) {
                 message = "이미 두 명이 접속 중이에요. 잠시 후 다시 시도해주세요.";
                 return;
             }
-            if (!"WELCOME".equals(type)) {
+            if (!"WELCOME".equals(type) || !(welcome.get("playerId") instanceof Long)) {
                 message = "팩맨 서버의 접속 응답을 확인할 수 없어요.";
                 return;
             }
@@ -63,13 +66,19 @@ public class ServerConnection implements AutoCloseable {
             synchronized (this) {
                 if (closed) return;
                 // 아무 버튼도 안 눌러도 접속이 유지되도록 10초마다 연락 보내기
-                heartbeat.scheduleAtFixedRate(() -> ping(writer), 10, 10, TimeUnit.SECONDS);
+                output = writer;
+                outgoing.scheduleAtFixedRate(() -> write(writer, "PING"), 10, 10, TimeUnit.SECONDS);
             }
             listener.connected();
+            listener.messageReceived(welcome);
 
-            while (!closed && reader.readLine() != null) {
-                // 지금은 접속 유지와 서버 종료 여부만 확인
+            String line;
+            while (!closed && (line = reader.readLine()) != null) {
+                Map<String, Object> response = ServerJson.parse(line);
+                if (!"PONG".equals(response.get("type"))) listener.messageReceived(response);
             }
+        } catch (IllegalArgumentException e) {
+            message = "팩맨 서버의 접속 응답을 확인할 수 없어요.";
         } catch (UnknownHostException e) {
             message = "서버 주소를 찾을 수 없어요. 주소를 확인해주세요.";
         } catch (ConnectException e) {
@@ -84,53 +93,27 @@ public class ServerConnection implements AutoCloseable {
         }
     }
 
-    private void ping(BufferedWriter writer) {
+    synchronized void send(String command) {
+        if (closed || output == null) return;
+        BufferedWriter writer = output;
+        outgoing.execute(() -> write(writer, command));
+    }
+
+    private void write(BufferedWriter writer, String command) {
         try {
-            writer.write("PING\n");
+            writer.write(command);
+            writer.write('\n');
             writer.flush();
         } catch (IOException e) {
             close();
         }
     }
 
-    private static String jsonText(String message, String field) {
-        // JSON 필드 순서나 공백이 달라도 접속 응답을 확인할 수 있게 하기
-        if (message == null) return null;
-        int position = 0;
-        while (position < message.length()) {
-            int keyStart = message.indexOf('"', position);
-            if (keyStart < 0) return null;
-            int keyEnd = message.indexOf('"', keyStart + 1);
-            if (keyEnd < 0) return null;
-
-            int colon = keyEnd + 1;
-            while (colon < message.length() && Character.isWhitespace(message.charAt(colon))) colon++;
-            if (colon >= message.length() || message.charAt(colon) != ':') return null;
-            colon++;
-            while (colon < message.length() && Character.isWhitespace(message.charAt(colon))) colon++;
-
-            if (colon >= message.length()) return null;
-            if (message.charAt(colon) == '"') {
-                int valueEnd = message.indexOf('"', colon + 1);
-                if (valueEnd < 0) return null;
-                if (message.substring(keyStart + 1, keyEnd).equals(field)) {
-                    return message.substring(colon + 1, valueEnd);
-                }
-                position = valueEnd + 1;
-            } else {
-                if (message.substring(keyStart + 1, keyEnd).equals(field)) return null;
-                int comma = message.indexOf(',', colon);
-                position = comma < 0 ? message.length() : comma + 1;
-            }
-        }
-        return null;
-    }
-
     @Override
     public synchronized void close() {
         if (closed) return;
         closed = true;
-        heartbeat.shutdownNow();
+        outgoing.shutdownNow();
         try {
             socket.close();
         } catch (IOException ignored) {

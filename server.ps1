@@ -43,6 +43,8 @@ try {
         } else {
             & java @javaOptions -ea -cp $testClasspath pacman.client.ConnectionWindowTests
             if ($LASTEXITCODE -ne 0) { throw 'Connection window tests failed.' }
+            & java @javaOptions -ea -cp $testClasspath pacman.client.LobbyWindowTests
+            if ($LASTEXITCODE -ne 0) { throw 'Lobby window tests failed.' }
         }
     }
     if ($Task -eq 'run') {
