@@ -16,6 +16,10 @@ public class PacmanServer implements AutoCloseable {
     private volatile boolean closed;
     private int nextPlayerId = 1;
     private int connectionVersion;
+    // 몇 번째 판인지 세려고 만든 변수
+    private int roundId;
+    // 게임 시작하면 역할을 다시 못 고르게 확인
+    private boolean gameRunning;
 
     public PacmanServer(String address, int port) throws IOException {
         serverSocket = new ServerSocket();
@@ -82,6 +86,9 @@ public class PacmanServer implements AutoCloseable {
                 return;
             }
             selectRole(client, parts[1]);
+        } else if (parts.length == 1 && parts[0].equals("READY")) {
+            // 준비 버튼 눌렀을 때
+            selectReady(client);
         } else if (parts.length == 1 && parts[0].equals("PING")) {
             client.send(Json.object("type", "PONG"));
         } else if (parts.length == 1 && parts[0].equals("QUIT")) {
@@ -92,6 +99,11 @@ public class PacmanServer implements AutoCloseable {
     }
 
     private void selectRole(ClientSession client, String role) {
+        if (gameRunning) {
+            // 게임 중에는 역할 바꾸면 안 되게 하기
+            client.send(error("INVALID_PHASE"));
+            return;
+        }
         if (!role.equals("PACMAN") && !role.equals("GHOST")) {
             client.send(error("INVALID_ROLE"));
             return;
@@ -106,16 +118,53 @@ public class PacmanServer implements AutoCloseable {
         }
 
         client.role = role;
+        // 역할을 다시 고르면 준비부터 다시 누르게 하기
+        client.ready = false;
         sendLobby();
         System.out.println(client.id + "번 역할 선택 / " + role);
     }
 
-    private void sendLobby() {
-        List<Map<String, Object>> players = new ArrayList<>();
-        for (ClientSession client : clients) {
-            players.add(Json.object("id", client.id, "role", client.role));
+    private void selectReady(ClientSession client) {
+        if (gameRunning || client.role == null) {
+            // 역할 안 고른 상태에서는 준비 못 하게 하기
+            client.send(error("INVALID_PHASE"));
+            return;
         }
-        broadcast(Json.object("type", "LOBBY", "players", players));
+
+        client.ready = true;
+        // 준비 상태가 바뀌면 상대 화면에도 바로 보내기
+        sendLobby();
+        startWhenReady();
+    }
+
+    private void startWhenReady() {
+        // 두 명이 다른 역할을 고르고 준비했을 때만 게임 시작 알림 보내기
+        if (gameRunning || clients.size() != 2) return;
+
+        ClientSession first = clients.get(0);
+        ClientSession second = clients.get(1);
+        if (first.role == null || second.role == null || first.role.equals(second.role)
+                || !first.ready || !second.ready) return;
+
+        gameRunning = true;
+        roundId++; // 몇 번째 판인지 1씩 늘리기
+        broadcast(Json.object("type", "GAME_START", "roundId", roundId,
+                "phase", "PLAYING", "remainingMs", 180000, "players", players()));
+        System.out.println("게임 시작 / " + roundId + "라운드");
+    }
+
+    private void sendLobby() {
+        broadcast(Json.object("type", "LOBBY", "phase", gameRunning ? "PLAYING" : "LOBBY",
+                "players", players()));
+    }
+
+    private List<Map<String, Object>> players() {
+        // 시작할 때도 서로 역할을 확인할 수 있게 정리
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (ClientSession client : clients) {
+            result.add(Json.object("id", client.id, "role", client.role, "ready", client.ready));
+        }
+        return result;
     }
 
     private void broadcast(Object message) {
@@ -131,6 +180,11 @@ public class PacmanServer implements AutoCloseable {
         // 수신이랑 송신 쪽에서 동시에 종료돼도 한 번만 목록에서 빼기
         if (!clients.remove(client)) return;
         connectionVersion++;
+        gameRunning = false;
+        for (ClientSession remaining : clients) {
+            // 상대가 나가면 새 상대와 다시 준비하도록 하기
+            remaining.ready = false;
+        }
         if (!closed) {
             broadcast(Json.object("type", "PLAYER_LEFT", "playerId", client.id));
             sendLobby();
