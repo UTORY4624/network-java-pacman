@@ -24,6 +24,9 @@ try {
     $sources = @(Get-ChildItem 'src/java/pacman' -Recurse -Filter '*.java' | ForEach-Object FullName)
     & javac -encoding UTF-8 -source 8 -target 8 -d $classes $sources
     if ($LASTEXITCODE -ne 0) { throw 'Java compilation failed. Use a JDK with javac.' }
+    # Eclipse처럼 실행 파일에도 맵을 넣어서 어느 폴더에서 실행해도 읽히게 하기
+    New-Item -ItemType Directory -Force (Join-Path $classes 'level') | Out-Null
+    Copy-Item -LiteralPath 'src/resources/level/level.csv' -Destination (Join-Path $classes 'level/level.csv')
     if ($Task -eq 'build' -or $Task -eq 'run') {
         & jar cfe $jarPath pacman.server.PacmanServer -C $classes .
         if ($LASTEXITCODE -ne 0) { throw 'JAR creation failed.' }
@@ -36,6 +39,8 @@ try {
         & javac -encoding UTF-8 -source 8 -target 8 -cp $classes -d $testClasses $tests
         if ($LASTEXITCODE -ne 0) { throw 'Test compilation failed.' }
         if ($Task -eq 'test') {
+            & java @javaOptions '-Djava.awt.headless=true' -ea -cp $testClasspath pacman.server.GameStateTests
+            if ($LASTEXITCODE -ne 0) { throw 'Game state tests failed.' }
             & java @javaOptions -ea -cp $testClasspath pacman.server.ServerTests
             if ($LASTEXITCODE -ne 0) { throw 'Server tests failed.' }
             & java @javaOptions -ea -cp $testClasspath pacman.client.ConnectionTests
