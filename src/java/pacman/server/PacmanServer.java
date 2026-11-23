@@ -12,6 +12,7 @@ import java.util.Map;
 
 public class PacmanServer implements AutoCloseable {
     private final ServerSocket serverSocket;
+    private final GameMap map;
     private final List<ClientSession> clients = new ArrayList<>();
     private volatile boolean closed;
     private int nextPlayerId = 1;
@@ -20,8 +21,10 @@ public class PacmanServer implements AutoCloseable {
     private int roundId;
     // 게임 시작하면 역할을 다시 못 고르게 확인
     private boolean gameRunning;
+    private GameState gameState;
 
     public PacmanServer(String address, int port) throws IOException {
+        map = GameMap.load();
         serverSocket = new ServerSocket();
         try {
             serverSocket.setReuseAddress(true);
@@ -34,6 +37,11 @@ public class PacmanServer implements AutoCloseable {
 
     public int getPort() {
         return serverSocket.getLocalPort();
+    }
+
+    // 상태를 읽거나 수정할 때는 서버의 synchronized 안에서 사용하기
+    synchronized GameState getGameState() {
+        return gameState;
     }
 
     public void run() throws IOException {
@@ -148,8 +156,11 @@ public class PacmanServer implements AutoCloseable {
 
         gameRunning = true;
         roundId++; // 몇 번째 판인지 1씩 늘리기
+        long pacmanId = "PACMAN".equals(first.role) ? first.id : second.id;
+        long ghostId = "GHOST".equals(first.role) ? first.id : second.id;
+        gameState = new GameState(map, roundId, pacmanId, ghostId);
         broadcast(Json.object("type", "GAME_START", "roundId", roundId,
-                "phase", "PLAYING", "remainingMs", 180000, "players", players()));
+                "phase", gameState.phase, "remainingMs", gameState.remainingMs, "players", players()));
         System.out.println("게임 시작 / " + roundId + "라운드");
     }
 
@@ -181,6 +192,7 @@ public class PacmanServer implements AutoCloseable {
         if (!clients.remove(client)) return;
         connectionVersion++;
         gameRunning = false;
+        gameState = null;
         for (ClientSession remaining : clients) {
             // 상대가 나가면 새 상대와 다시 준비하도록 하기
             remaining.ready = false;
@@ -200,6 +212,8 @@ public class PacmanServer implements AutoCloseable {
     public synchronized void close() {
         if (closed) return;
         closed = true;
+        gameRunning = false;
+        gameState = null;
         try {
             serverSocket.close();
         } catch (IOException e) {
