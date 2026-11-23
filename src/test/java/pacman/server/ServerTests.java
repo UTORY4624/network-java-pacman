@@ -56,6 +56,7 @@ public class ServerTests {
             first.send("READY");
             check(first.await("\"ready\":true").contains("\"id\":1"), "첫 번째 준비 상태 공유");
             first.expectNoMessage();
+            check(server.getGameState() == null, "한 명만 준비하면 게임 상태 생성 안 함");
             second.send("READY");
             String firstStart = first.await("GAME_START");
             check(firstStart.contains("\"roundId\":1") && firstStart.contains("\"role\":\"PACMAN\"")
@@ -63,6 +64,12 @@ public class ServerTests {
             check(second.await("GAME_START").contains("\"roundId\":1"), "두 명 준비 후 두 번째 시작 안내");
             first.expectNoMessage();
             first.send("ROLE GHOST");
+            synchronized (server) {
+                GameState state = server.getGameState();
+                check(state != null && state.roundId == 1 && state.pacman.id == 1 && state.ghost.id == 2,
+                        "게임 시작 전에 서버 상태 생성");
+                check(state.remainingMs == 180000, "서버 초기 제한 시간");
+            }
             check(first.await("INVALID_PHASE").contains("ERROR"), "진행 중 역할 변경 막기");
             first.send("READY 1");
             check(first.await("BAD_COMMAND").contains("ERROR"), "준비 명령 인자 처리");
@@ -78,6 +85,7 @@ public class ServerTests {
             second.send("QUIT");
             check(first.await("PLAYER_LEFT").contains("\"playerId\":2"), "상대 종료 알림");
             String afterLeave = first.await("LOBBY");
+            check(server.getGameState() == null, "상대 종료 후 게임 상태 제거");
             check(!afterLeave.contains("\"id\":2") && afterLeave.contains("\"ready\":false"),
                     "상대 종료 후 준비 상태 초기화");
             first.send("ROLE GHOST");
@@ -87,6 +95,17 @@ public class ServerTests {
                 check(replacement.await("WELCOME").contains("\"playerId\":3"), "빈자리 재접속");
                 replacement.send("ROLE PACMAN");
                 check(replacement.await("\"role\":\"PACMAN\"").contains("\"id\":3"), "변경 후 비워진 역할 선택");
+                first.send("READY");
+                first.await("\"id\":1,\"role\":\"GHOST\",\"ready\":true");
+                replacement.send("READY");
+                check(replacement.await("GAME_START").contains("\"roundId\":2"), "새 상대와 두 번째 판 시작");
+                first.await("GAME_START");
+                synchronized (server) {
+                    GameState state = server.getGameState();
+                    check(state.pacman.id == 3 && state.ghost.id == 1 && state.lives == 2
+                            && state.remainingMs == 180000 && state.pacman.x == state.map.pacmanX,
+                            "새 역할로 초기 상태 생성");
+                }
             }
             check(first.await("PLAYER_LEFT").contains("\"playerId\":3"), "창을 닫은 경우도 정리");
             first.await("LOBBY");
@@ -117,6 +136,7 @@ public class ServerTests {
             serverThread.join(3000);
         }
         check(!serverThread.isAlive() && failure.get() == null, "서버 정상 종료");
+        check(server.getGameState() == null, "서버 종료 후 상태 제거");
         System.out.println("PASS / 접속·역할 선택 테스트 " + checks + "개 통과");
     }
 
