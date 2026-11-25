@@ -24,4 +24,15 @@ public final class GameUiScenario {
             game.pacman.y = 5;
         }
     }
+
+    public static void placeAtDetectionDistance(PacmanServer server, int distance) {
+        synchronized (server) {
+            GameState game = server.getGameState();
+            game.pacman.requestedDirection = game.ghost.requestedDirection = null;
+            game.pacman.x = game.pacman.startX;
+            game.pacman.y = game.pacman.startY;
+            game.ghost.x = game.pacman.x + distance;
+            game.ghost.y = game.pacman.y;
+        }
+    }
 }

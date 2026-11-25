@@ -100,12 +100,28 @@ public class ServerTests {
             }
             String moved = first.await("\"self\":{\"id\":1,\"role\":\"PACMAN\",\"x\":1,\"y\":1");
             check(!moved.contains("[2,2]"), "실제 TCP 이동 후 먹이 제거 전송");
-            String otherView = second.await("\"opponent\":{\"id\":1,\"role\":\"PACMAN\",\"x\":1,\"y\":1");
-            check(!otherView.contains("[2,2]"), "상대에게도 같은 위치와 먹이 전송");
+            String otherView = second.await("\"pellets\":[[6,2]");
+            check(!otherView.contains("[2,2]") && otherView.contains("\"opponent\":null"),
+                    "범위 밖 상대 위치는 숨기고 먹이 변화는 전송");
             synchronized (server) {
                 server.getGameState().pacman.requestedDirection = null;
                 server.getGameState().ghost.requestedDirection = null;
             }
+
+            // 실제 TCP 출력으로 경계 진입/이탈을 확인. (3,4)는 직선거리 5칸이다.
+            synchronized (server) {
+                GameState state = server.getGameState();
+                state.pacman.x = 10; state.pacman.y = 10;
+                state.ghost.x = 13; state.ghost.y = 14;
+            }
+            check(first.await("\"opponent\":{\"id\":2").contains("\"x\":13,\"y\":14"), "TCP 팩맨 탐지 진입");
+            check(second.await("\"opponent\":{\"id\":1").contains("\"x\":10,\"y\":10"), "TCP 유령 탐지 진입");
+            synchronized (server) {
+                server.getGameState().ghost.x = 14; // sqrt(32) > 5
+                server.getGameState().powerRemainingMs = 5000;
+            }
+            check(first.await("\"opponent\":null").contains("\"self\":{\"id\":1"), "TCP 파워 중 상대 숨김과 self 유지");
+            check(second.await("\"opponent\":null").contains("\"food\":"), "TCP 범위 이탈과 공통 먹이 유지");
 
             // 메시지가 나뉘어 오거나 한 번에 여러 개 와도 줄 단위로 받는지 확인
             first.sendRaw("PI");

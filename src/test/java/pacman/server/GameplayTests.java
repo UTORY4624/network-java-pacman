@@ -110,6 +110,7 @@ public class GameplayTests {
         check(s.remainingMs == 0 && !s.move(1, "RIGHT"), "제한 시간은 0 아래로 내려가지 않음");
 
         s = arena(); s.sequence = 7;
+        s.ghost.x = s.pacman.x + 3; s.ghost.y = s.pacman.y + 4;
         Map<String, Object> first = s.snapshot(1), second = s.snapshot(2);
         check(first.get("self").equals(second.get("opponent"))
                 && first.get("opponent").equals(second.get("self")), "사용자별 self / opponent 전환");

@@ -9,6 +9,7 @@ import java.util.Map;
 final class GameState {
     static final int INITIAL_LIVES = 2;
     static final int ROUND_TIME_MS = 180000;
+    static final int DETECTION_RADIUS = 5;
     final GameMap map;
     final int bodySize;
     final int roundId;
@@ -160,10 +161,14 @@ final class GameState {
     Map<String, Object> snapshot(long id) {
         PlayerState self = player(id);
         if (self == null) throw new IllegalArgumentException("Unknown player");
-        // #16 전까지 개발용으로 상대 전체 좌표 공개. 최종 탐지는 여기서 제한한다.
+        PlayerState opponent = self == pacman ? ghost : pacman;
+        // 같은 크기의 캐릭터이므로 왼쪽 위 좌표 차이는 중심 좌표 차이와 같다.
+        long dx = (long) self.x - opponent.x;
+        long dy = (long) self.y - opponent.y;
+        boolean visible = dx * dx + dy * dy <= DETECTION_RADIUS * DETECTION_RADIUS;
         return Json.object("type", "GAME_STATE", "roundId", roundId, "sequence", sequence,
                 "phase", phase, "remainingMs", remainingMs, "self", playerData(self),
-                "opponent", playerData(self == pacman ? ghost : pacman),
+                "opponent", visible ? playerData(opponent) : null,
                 "food", Json.object("pellets", coordinates(pellets), "powerItems", coordinates(powerItems)));
     }
 
