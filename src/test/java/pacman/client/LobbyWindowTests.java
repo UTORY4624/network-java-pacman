@@ -11,6 +11,7 @@ import javax.swing.JLabel;
 import javax.swing.JTextField;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
+import pacman.server.GameUiScenario;
 import pacman.server.PacmanServer;
 
 // 준비·시작을 지원하는 #9 서버와 연결하는 Swing 통합 테스트.
@@ -73,7 +74,7 @@ public class LobbyWindowTests {
                 expectLabel(second, "1라운드 게임 시작");
                 expectLabel(first, "내 역할 · 팩맨");
                 expectLabel(second, "내 역할 · 유령");
-                checkMovement(first, second);
+                checkGameplay(server, first, second);
 
                 click(second, "연결 해제");
                 expectLabel(second, "연결을 해제했어요.");
@@ -81,7 +82,7 @@ public class LobbyWindowTests {
                 expectLabel(first, "상대 · 접속 대기");
                 expectLabel(first, "나 · 팩맨 · 준비 전");
                 waitFor(() -> enabled(first, "준비"), "퇴장 후 다시 준비 가능");
-                System.out.println("PASS / 두 창에서 역할 공유, 중복 역할 안내, 준비 대기, 게임 시작 및 퇴장 후 복귀");
+                System.out.println("PASS / 두 창에서 대기실, 이동, 먹이, 목숨, 파워 및 재배치·복귀 표시");
             } finally {
                 SwingUtilities.invokeAndWait(() -> {
                     for (ConnectionWindow window : windows) {
@@ -94,7 +95,7 @@ public class LobbyWindowTests {
         }
     }
 
-    private static void checkMovement(ConnectionWindow first, ConnectionWindow second) throws Exception {
+    private static void checkGameplay(PacmanServer server, ConnectionWindow first, ConnectionWindow second) throws Exception {
         JComponent[] boards = new JComponent[2];
         int[] colors = new int[2];
         SwingUtilities.invokeAndWait(() -> {
@@ -118,12 +119,43 @@ public class LobbyWindowTests {
 
         int leftOfPacman = centerX - 18;
         int rightOfGhost = centerX + 18;
+        // The leftward route crosses the pellet at (24,46).
+        int pelletX = 24 * 8 + 10, pelletY = 46 * 8 + 10;
+        int background = boards[0].getBackground().getRGB();
+        SwingUtilities.invokeAndWait(() -> {
+            int pelletColor = NetworkGameplayTests.pixel(boards[0], pelletX, pelletY);
+            check(pelletColor != background && matchesBoth(boards, pelletX, pelletY, pelletColor),
+                    "both clients initially see the pellet");
+        });
         SwingUtilities.invokeAndWait(() -> NetworkGameplayTests.press(boards[0], "LEFT"));
         waitFor(() -> matchesBoth(boards, leftOfPacman, pacmanY, colors[0])
                 && matchesBoth(boards, centerX, ghostY, colors[1]), "first input moves only Pacman in both clients");
 
         SwingUtilities.invokeAndWait(() -> NetworkGameplayTests.press(boards[1], "RIGHT"));
         waitFor(() -> matchesBoth(boards, rightOfGhost, ghostY, colors[1]), "second input moves Ghost in both clients");
+        waitFor(() -> matchesBoth(boards, pelletX, pelletY, background), "both clients remove the collected pellet");
+
+        GameUiScenario.placePlayersInContact(server);
+        waitFor(() -> bothShow(first, second, "팩맨 재배치 대기 중") && bothShow(first, second, "팩맨 목숨 · 1")
+                && matchesBoth(boards, centerX, pacmanY, colors[0])
+                && matchesBoth(boards, centerX, ghostY, colors[1]), "both clients show the updated lives and spawn positions");
+        waitFor(() -> bothHide(first, second, "팩맨 재배치 대기 중"), "both clients clear the respawn notice");
+
+        GameUiScenario.placePacmanByPowerItem(server);
+        waitFor(() -> bothShow(first, second, "파워 · 5초"), "both clients show the acquired power");
+        GameUiScenario.placePlayersInContact(server);
+        waitFor(() -> bothShow(first, second, "유령 복귀 대기 중") && bothShow(first, second, "팩맨 목숨 · 1")
+                && matchesBoth(boards, centerX, ghostY, colors[1]), "both clients show the returning Ghost at its spawn");
+        waitFor(() -> bothHide(first, second, "유령 복귀 대기 중"), "both clients clear the return notice");
+        waitFor(() -> bothShow(first, second, "파워 · 없음"), "both clients clear the expired power");
+    }
+
+    private static boolean bothShow(ConnectionWindow first, ConnectionWindow second, String text) {
+        return label(first, text) != null && label(second, text) != null;
+    }
+
+    private static boolean bothHide(ConnectionWindow first, ConnectionWindow second, String text) {
+        return label(first, text) == null && label(second, text) == null;
     }
 
     private static boolean matchesBoth(JComponent[] boards, int x, int y, int color) {
