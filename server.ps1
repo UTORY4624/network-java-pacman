@@ -47,6 +47,8 @@ try {
             if ($LASTEXITCODE -ne 0) { throw 'Server tests failed.' }
             & java @javaOptions -ea -cp $testClasspath pacman.client.ConnectionTests
             if ($LASTEXITCODE -ne 0) { throw 'Client connection tests failed.' }
+            & java @javaOptions '-Djava.awt.headless=true' -ea -cp $testClasspath pacman.client.NetworkGameplayTests
+            if ($LASTEXITCODE -ne 0) { throw 'Client gameplay tests failed.' }
         } else {
             & java @javaOptions -ea -cp $testClasspath pacman.client.ConnectionWindowTests
             if ($LASTEXITCODE -ne 0) { throw 'Connection window tests failed.' }
