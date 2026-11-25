@@ -8,8 +8,9 @@ final class PlayerState {
     int x;
     int y;
     String direction = "LEFT";
-    // 처음에는 가만히 있고, 실제 이동 입력은 #12에서 받기
+    // 입력 전에는 정지. 4000 단위마다 한 칸 이동 (팩맨 20/ms, 유령 23/ms).
     String requestedDirection;
+    int movementCredit;
     String status = "ACTIVE";
     int waitRemainingMs;
 

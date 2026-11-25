@@ -9,6 +9,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class PacmanServer implements AutoCloseable {
     private final ServerSocket serverSocket;
@@ -22,6 +25,12 @@ public class PacmanServer implements AutoCloseable {
     // 게임 시작하면 역할을 다시 못 고르게 확인
     private boolean gameRunning;
     private GameState gameState;
+    private final ScheduledExecutorService ticker = Executors.newSingleThreadScheduledExecutor(task -> {
+        Thread thread = new Thread(task, "game-ticker");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private int stateElapsedMs;
 
     public PacmanServer(String address, int port) throws IOException {
         map = GameMap.load();
@@ -33,6 +42,7 @@ public class PacmanServer implements AutoCloseable {
             serverSocket.close();
             throw e;
         }
+        ticker.scheduleAtFixedRate(this::tick, 10, 10, TimeUnit.MILLISECONDS);
     }
 
     public int getPort() {
@@ -94,6 +104,12 @@ public class PacmanServer implements AutoCloseable {
                 return;
             }
             selectRole(client, parts[1]);
+        } else if (parts[0].equals("MOVE")) {
+            if (parts.length != 2 || !GameState.validDirection(parts[1])) {
+                client.send(error("BAD_COMMAND"));
+            } else if (gameState == null || !gameState.move(client.id, parts[1])) {
+                client.send(error("INVALID_PHASE"));
+            }
         } else if (parts.length == 1 && parts[0].equals("READY")) {
             // 준비 버튼 눌렀을 때
             selectReady(client);
@@ -159,9 +175,32 @@ public class PacmanServer implements AutoCloseable {
         long pacmanId = "PACMAN".equals(first.role) ? first.id : second.id;
         long ghostId = "GHOST".equals(first.role) ? first.id : second.id;
         gameState = new GameState(map, roundId, pacmanId, ghostId);
+        stateElapsedMs = 0;
         broadcast(Json.object("type", "GAME_START", "roundId", roundId,
                 "phase", gameState.phase, "remainingMs", gameState.remainingMs, "players", players()));
+        sendGameState();
         System.out.println("게임 시작 / " + roundId + "라운드");
+    }
+
+    private synchronized void tick() {
+        if (closed || gameState == null) return;
+        boolean changed = gameState.advance(10);
+        stateElapsedMs += 10;
+        if (changed || stateElapsedMs >= 100) {
+            stateElapsedMs = 0;
+            sendGameState();
+        }
+    }
+
+    private void sendGameState() {
+        GameState state = gameState;
+        if (state == null) return;
+        state.sequence++;
+        for (ClientSession client : new ArrayList<>(clients)) {
+            // 송신 큐 초과로 연결이 정리되면 이전 라운드 상태를 더 보내지 않는다.
+            if (gameState != state) return;
+            client.send(state.snapshot(client.id));
+        }
     }
 
     private void sendLobby() {
@@ -212,6 +251,7 @@ public class PacmanServer implements AutoCloseable {
     public synchronized void close() {
         if (closed) return;
         closed = true;
+        ticker.shutdownNow();
         gameRunning = false;
         gameState = null;
         try {

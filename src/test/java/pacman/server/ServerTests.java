@@ -40,6 +40,10 @@ public class ServerTests {
 
             first.send("READY");
             check(first.await("INVALID_PHASE").contains("ERROR"), "역할 선택 전 준비 막기");
+            first.send("MOVE LEFT");
+            check(first.await("INVALID_PHASE").contains("ERROR"), "대기 중 이동 거절");
+            first.send("MOVE DIAGONAL");
+            check(first.await("BAD_COMMAND").contains("ERROR"), "잘못된 이동 방향 거절");
             first.send("ROLE PACMAN");
             check(first.await("\"role\":\"PACMAN\"").contains("\"id\":1"), "팩맨 선택");
             second.send("ROLE PACMAN");
@@ -62,19 +66,46 @@ public class ServerTests {
             check(firstStart.contains("\"roundId\":1") && firstStart.contains("\"role\":\"PACMAN\"")
                     && firstStart.contains("\"role\":\"GHOST\""), "두 명 준비 후 첫 번째 시작 안내");
             check(second.await("GAME_START").contains("\"roundId\":1"), "두 명 준비 후 두 번째 시작 안내");
-            first.expectNoMessage();
+            String initial = first.reader.readLine();
+            check(initial.contains("GAME_STATE") && initial.contains("\"sequence\":1")
+                    && initial.contains("\"remainingMs\":180000"), "시작 직후 초기 상태 전송");
+            check(second.reader.readLine().contains("\"self\":{\"id\":2"), "두 번째 사용자 전용 상태");
+            String periodic = first.reader.readLine();
+            check(periodic.contains("GAME_STATE") && periodic.contains("\"sequence\":2"), "주기적 상태 전송, 시작 중복 없음");
             first.send("ROLE GHOST");
             synchronized (server) {
                 GameState state = server.getGameState();
                 check(state != null && state.roundId == 1 && state.pacman.id == 1 && state.ghost.id == 2,
                         "게임 시작 전에 서버 상태 생성");
-                check(state.remainingMs == 180000, "서버 초기 제한 시간");
+                check(state.remainingMs < 180000 && state.remainingMs > 175000, "서버 제한 시간 진행");
             }
             check(first.await("INVALID_PHASE").contains("ERROR"), "진행 중 역할 변경 막기");
             first.send("READY 1");
             check(first.await("BAD_COMMAND").contains("ERROR"), "준비 명령 인자 처리");
             first.send("MOVE 1 RIGHT");
             check(first.await("BAD_COMMAND").contains("ERROR"), "이동 명령 처리 범위 확인");
+
+            synchronized (server) {
+                server.getGameState().pacman.x = 0;
+                server.getGameState().pacman.y = 1;
+            }
+            first.sendRaw("MOVE RI");
+            first.sendRaw("GHT\nPING\n");
+            first.await("PONG");
+            second.sendRaw("MOVE LEFT\nPING\n");
+            second.await("PONG");
+            synchronized (server) {
+                check("RIGHT".equals(server.getGameState().pacman.requestedDirection)
+                        && "LEFT".equals(server.getGameState().ghost.requestedDirection), "두 연결의 입력을 본인 역할에 적용");
+            }
+            String moved = first.await("\"self\":{\"id\":1,\"role\":\"PACMAN\",\"x\":1,\"y\":1");
+            check(!moved.contains("[2,2]"), "실제 TCP 이동 후 먹이 제거 전송");
+            String otherView = second.await("\"opponent\":{\"id\":1,\"role\":\"PACMAN\",\"x\":1,\"y\":1");
+            check(!otherView.contains("[2,2]"), "상대에게도 같은 위치와 먹이 전송");
+            synchronized (server) {
+                server.getGameState().pacman.requestedDirection = null;
+                server.getGameState().ghost.requestedDirection = null;
+            }
 
             // 메시지가 나뉘어 오거나 한 번에 여러 개 와도 줄 단위로 받는지 확인
             first.sendRaw("PI");
@@ -85,6 +116,7 @@ public class ServerTests {
             second.send("QUIT");
             check(first.await("PLAYER_LEFT").contains("\"playerId\":2"), "상대 종료 알림");
             String afterLeave = first.await("LOBBY");
+            first.expectNoMessage();
             check(server.getGameState() == null, "상대 종료 후 게임 상태 제거");
             check(!afterLeave.contains("\"id\":2") && afterLeave.contains("\"ready\":false"),
                     "상대 종료 후 준비 상태 초기화");
@@ -103,7 +135,7 @@ public class ServerTests {
                 synchronized (server) {
                     GameState state = server.getGameState();
                     check(state.pacman.id == 3 && state.ghost.id == 1 && state.lives == 2
-                            && state.remainingMs == 180000 && state.pacman.x == state.map.pacmanX,
+                            && state.remainingMs > 175000 && state.pacman.x == state.map.pacmanX,
                             "새 역할로 초기 상태 생성");
                 }
             }
