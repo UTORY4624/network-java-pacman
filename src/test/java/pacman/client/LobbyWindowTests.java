@@ -128,26 +128,38 @@ public class LobbyWindowTests {
                     "both clients initially see the pellet");
         });
         SwingUtilities.invokeAndWait(() -> NetworkGameplayTests.press(boards[0], "LEFT"));
-        waitFor(() -> matchesBoth(boards, leftOfPacman, pacmanY, colors[0])
-                && matchesBoth(boards, centerX, ghostY, colors[1]), "first input moves only Pacman in both clients");
+        waitFor(() -> NetworkGameplayTests.pixel(boards[0], leftOfPacman, pacmanY) == colors[0]
+                && NetworkGameplayTests.pixel(boards[1], centerX, ghostY) == colors[1]
+                && NetworkGameplayTests.pixel(boards[1], leftOfPacman, pacmanY) != colors[0],
+                "self moves while the distant opponent stays hidden");
 
         SwingUtilities.invokeAndWait(() -> NetworkGameplayTests.press(boards[1], "RIGHT"));
-        waitFor(() -> matchesBoth(boards, rightOfGhost, ghostY, colors[1]), "second input moves Ghost in both clients");
+        waitFor(() -> NetworkGameplayTests.pixel(boards[1], rightOfGhost, ghostY) == colors[1]
+                && NetworkGameplayTests.pixel(boards[0], rightOfGhost, ghostY) != colors[1], "Ghost moves only in its own distant view");
         waitFor(() -> matchesBoth(boards, pelletX, pelletY, background), "both clients remove the collected pellet");
 
+        GameUiScenario.placeAtDetectionDistance(server, 5);
+        waitFor(() -> matchesBoth(boards, centerX + 40, pacmanY, colors[1])
+                && matchesBoth(boards, centerX, pacmanY, colors[0]), "both clients reveal opponents at five tiles");
+        GameUiScenario.placeAtDetectionDistance(server, 6);
+        waitFor(() -> NetworkGameplayTests.pixel(boards[0], centerX + 40, pacmanY) != colors[1]
+                && NetworkGameplayTests.pixel(boards[1], centerX, pacmanY) != colors[0], "leaving range clears previous opponent pixels");
+
         GameUiScenario.placePlayersInContact(server);
-        waitFor(() -> bothShow(first, second, "팩맨 재배치 대기 중") && bothShow(first, second, "팩맨 목숨 · 1")
-                && matchesBoth(boards, centerX, pacmanY, colors[0])
-                && matchesBoth(boards, centerX, ghostY, colors[1]), "both clients show the updated lives and spawn positions");
+        waitFor(() -> bothShow(first, second, "팩맨 재배치 대기 중") && label(first, "팩맨 목숨 · 1") != null
+                && label(second, "팩맨 목숨 · 1") == null
+                && NetworkGameplayTests.pixel(boards[0], centerX, pacmanY) == colors[0]
+                && NetworkGameplayTests.pixel(boards[1], centerX, ghostY) == colors[1], "respawn preserves self and hides distant Pacman data");
         waitFor(() -> bothHide(first, second, "팩맨 재배치 대기 중"), "both clients clear the respawn notice");
 
         GameUiScenario.placePacmanByPowerItem(server);
-        waitFor(() -> bothShow(first, second, "파워 · 5초"), "both clients show the acquired power");
+        waitFor(() -> label(first, "파워 · 5초") != null && label(second, "파워 · 5초") == null, "only visible Pacman data includes power");
         GameUiScenario.placePlayersInContact(server);
-        waitFor(() -> bothShow(first, second, "유령 복귀 대기 중") && bothShow(first, second, "팩맨 목숨 · 1")
-                && matchesBoth(boards, centerX, ghostY, colors[1]), "both clients show the returning Ghost at its spawn");
+        waitFor(() -> label(second, "유령 복귀 대기 중") != null && label(first, "유령 복귀 대기 중") == null
+                && label(first, "팩맨 목숨 · 1") != null
+                && NetworkGameplayTests.pixel(boards[1], centerX, ghostY) == colors[1], "only Ghost sees its distant return state");
         waitFor(() -> bothHide(first, second, "유령 복귀 대기 중"), "both clients clear the return notice");
-        waitFor(() -> bothShow(first, second, "파워 · 없음"), "both clients clear the expired power");
+        waitFor(() -> label(first, "파워 · 없음") != null && label(second, "파워 · 없음") == null, "hidden Pacman data remains absent after power expires");
     }
 
     private static boolean bothShow(ConnectionWindow first, ConnectionWindow second, String text) {
