@@ -4,6 +4,7 @@ import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.Point;
 import java.awt.RenderingHints;
 import java.awt.event.ActionEvent;
 import java.io.BufferedReader;
@@ -26,16 +27,21 @@ final class NetworkGamePanel extends JPanel {
     private static final int PLAYER_SIZE = 4 * TILE_SIZE;
     private static final Color WALL = new Color(41, 70, 157);
     private static final Color DOOR = new Color(214, 151, 194);
+    private static final Color PELLET = new Color(255, 217, 178);
+    private static final Color POWER_ITEM = new Color(112, 230, 224);
     private static final Color PACMAN = new Color(250, 215, 61);
     private static final Color GHOST = new Color(237, 85, 111);
 
     private final long playerId;
     private final List<String[]> map = loadMap();
+    private final GameStatusPanel status = new GameStatusPanel();
     private Long roundId;
     private long sequence;
     private boolean canMove;
     private Player self;
     private Player opponent;
+    private List<Point> pellets = Collections.emptyList();
+    private List<Point> powerItems = Collections.emptyList();
 
     NetworkGamePanel(long playerId, Consumer<String> send) {
         this.playerId = playerId;
@@ -54,6 +60,10 @@ final class NetworkGamePanel extends JPanel {
         }
     }
 
+    JPanel statusPanel() {
+        return status;
+    }
+
     void start(long id) {
         clear();
         roundId = id;
@@ -65,6 +75,9 @@ final class NetworkGamePanel extends JPanel {
         canMove = false;
         self = null;
         opponent = null;
+        pellets = Collections.emptyList();
+        powerItems = Collections.emptyList();
+        status.clear();
         repaint();
     }
 
@@ -92,6 +105,11 @@ final class NetworkGamePanel extends JPanel {
         Object receivedOpponent = message.get("opponent");
         Map<?, ?> opponentData = receivedOpponent instanceof Map<?, ?> ? (Map<?, ?>) receivedOpponent : null;
         opponent = opponentData == null ? null : Player.from(opponentData);
+        Object food = message.get("food");
+        Map<?, ?> foodData = food instanceof Map<?, ?> ? (Map<?, ?>) food : Collections.emptyMap();
+        pellets = foodPositions(foodData.get("pellets"));
+        powerItems = foodPositions(foodData.get("powerItems"));
+        status.update(message.get("remainingMs"), selfData, opponentData);
         canMove = "PLAYING".equals(message.get("phase")) && "ACTIVE".equals(selfData.get("status"))
                 && !Long.valueOf(0).equals(message.get("remainingMs"))
                 && !Long.valueOf(0).equals(selfData.get("lives"))
@@ -126,9 +144,33 @@ final class NetworkGamePanel extends JPanel {
             }
         }
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        drawFood(g, pellets, TILE_SIZE, 4, PELLET);
+        drawFood(g, powerItems, 0, 2 * TILE_SIZE, POWER_ITEM);
         if (opponent != null) opponent.draw(g, false);
         if (self != null) self.draw(g, true);
         g.dispose();
+    }
+
+    private List<Point> foodPositions(Object value) {
+        if (!(value instanceof List<?>) || map.isEmpty()) return Collections.emptyList();
+        List<Point> positions = new ArrayList<>();
+        for (Object entry : (List<?>) value) {
+            if (!(entry instanceof List<?>)) continue;
+            List<?> pair = (List<?>) entry;
+            if (pair.size() != 2 || !(pair.get(0) instanceof Long) || !(pair.get(1) instanceof Long)) continue;
+            long x = (Long) pair.get(0), y = (Long) pair.get(1);
+            if (y >= 0 && y < map.size() && x >= 0 && x < map.get((int) y).length) {
+                positions.add(new Point((int) x * TILE_SIZE, (int) y * TILE_SIZE));
+            }
+        }
+        return positions;
+    }
+
+    private static void drawFood(Graphics2D graphics, List<Point> positions, int offset, int size, Color color) {
+        graphics.setColor(color);
+        for (Point position : positions) {
+            graphics.fillOval(position.x + offset, position.y + offset, size, size);
+        }
     }
 
     private static List<String[]> loadMap() {

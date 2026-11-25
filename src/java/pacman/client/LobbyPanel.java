@@ -53,9 +53,12 @@ final class LobbyPanel extends JPanel {
         screens.add(lobby, LOBBY);
 
         JPanel game = new JPanel(new BorderLayout(0, 8));
-        JPanel heading = new JPanel(new GridLayout(0, 1, 0, 4));
-        heading.add(gameTitle);
-        heading.add(gameRole);
+        JPanel labels = new JPanel(new GridLayout(0, 1, 0, 4));
+        labels.add(gameTitle);
+        labels.add(gameRole);
+        JPanel heading = new JPanel(new BorderLayout(0, 4));
+        heading.add(labels, BorderLayout.NORTH);
+        heading.add(board.statusPanel(), BorderLayout.CENTER);
         game.add(heading, BorderLayout.NORTH);
         game.add(board, BorderLayout.CENTER);
         screens.add(game, PLAYING);
