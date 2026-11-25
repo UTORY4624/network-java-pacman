@@ -23,6 +23,7 @@ final class LobbyPanel extends JPanel {
     private final JLabel notice = new JLabel("대기실 정보를 받는 중이에요.");
     private final JLabel gameTitle = new JLabel();
     private final JLabel gameRole = new JLabel();
+    private final NetworkGamePanel board;
     private final JButton pacman = new JButton("팩맨 선택");
     private final JButton ghost = new JButton("유령 선택");
     private final JButton ready = new JButton("준비");
@@ -37,6 +38,7 @@ final class LobbyPanel extends JPanel {
     LobbyPanel(long playerId, Consumer<String> send, Runnable disconnect) {
         super(new BorderLayout(0, 16));
         this.playerId = playerId;
+        board = new NetworkGamePanel(playerId, send);
         setBorder(BorderFactory.createEmptyBorder(22, 24, 22, 24));
 
         JPanel lobby = new JPanel(new GridLayout(0, 1, 0, 8));
@@ -50,9 +52,12 @@ final class LobbyPanel extends JPanel {
         lobby.add(actions);
         screens.add(lobby, LOBBY);
 
-        JPanel game = new JPanel(new GridLayout(0, 1, 0, 8));
-        game.add(gameTitle);
-        game.add(gameRole);
+        JPanel game = new JPanel(new BorderLayout(0, 8));
+        JPanel heading = new JPanel(new GridLayout(0, 1, 0, 4));
+        heading.add(gameTitle);
+        heading.add(gameRole);
+        game.add(heading, BorderLayout.NORTH);
+        game.add(board, BorderLayout.CENTER);
         screens.add(game, PLAYING);
         add(screens, BorderLayout.CENTER);
 
@@ -82,7 +87,12 @@ final class LobbyPanel extends JPanel {
             }
         } else if ("GAME_START".equals(type)) {
             startGame(message);
+        } else if ("GAME_STATE".equals(type)) {
+            board.receive(message);
+        } else if ("ROUND_RESULT".equals(type)) {
+            board.finish(message.get("roundId"));
         } else if ("PLAYER_LEFT".equals(type)) {
+            board.clear();
             opponent.setText("상대 · 접속 대기");
             notice.setText("상대가 연결을 종료했어요.");
             readyConfirmed = false;
@@ -139,6 +149,7 @@ final class LobbyPanel extends JPanel {
         if (!inLobby && "대기실 정보를 받는 중이에요.".equals(notice.getText())) {
             notice.setText("역할을 선택해 주세요.");
         }
+        board.clear();
         inLobby = true;
         cards.show(screens, LOBBY);
         updateButtons();
@@ -146,6 +157,7 @@ final class LobbyPanel extends JPanel {
 
     private void startGame(Map<String, Object> message) {
         if (!(message.get("roundId") instanceof Long)) return;
+        board.start((Long) message.get("roundId"));
         inLobby = false;
         pendingRole = null;
         readyPending = false;

@@ -6,8 +6,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BooleanSupplier;
 import javax.swing.JButton;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JTextField;
+import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import pacman.server.PacmanServer;
 
@@ -71,6 +73,7 @@ public class LobbyWindowTests {
                 expectLabel(second, "1라운드 게임 시작");
                 expectLabel(first, "내 역할 · 팩맨");
                 expectLabel(second, "내 역할 · 유령");
+                checkMovement(first, second);
 
                 click(second, "연결 해제");
                 expectLabel(second, "연결을 해제했어요.");
@@ -89,6 +92,43 @@ public class LobbyWindowTests {
                 serverThread.join(3000);
             }
         }
+    }
+
+    private static void checkMovement(ConnectionWindow first, ConnectionWindow second) throws Exception {
+        JComponent[] boards = new JComponent[2];
+        int[] colors = new int[2];
+        SwingUtilities.invokeAndWait(() -> {
+            KeyStroke left = KeyStroke.getKeyStroke("LEFT");
+            boards[0] = NetworkGameplayTests.findBinding(first.getContentPane(), left);
+            boards[1] = NetworkGameplayTests.findBinding(second.getContentPane(), left);
+            for (JComponent board : boards) {
+                check(board != null, "each client shows the gameplay board");
+                board.setSize(board.getPreferredSize());
+            }
+        });
+
+        // Center pixels at the original map's spawn tiles (26,45) and (26,21).
+        int centerX = 26 * 8 + 16, pacmanY = 45 * 8 + 16, ghostY = 21 * 8 + 16;
+        waitFor(() -> {
+            colors[0] = NetworkGameplayTests.pixel(boards[0], centerX, pacmanY);
+            colors[1] = NetworkGameplayTests.pixel(boards[1], centerX, ghostY);
+            return (colors[0] & 0x00ff0000) > 0x00d00000 && (colors[1] & 0x00ff0000) > 0x00d00000
+                    && colors[0] != colors[1];
+        }, "both clients receive the initial server positions");
+
+        int leftOfPacman = centerX - 18;
+        int rightOfGhost = centerX + 18;
+        SwingUtilities.invokeAndWait(() -> NetworkGameplayTests.press(boards[0], "LEFT"));
+        waitFor(() -> matchesBoth(boards, leftOfPacman, pacmanY, colors[0])
+                && matchesBoth(boards, centerX, ghostY, colors[1]), "first input moves only Pacman in both clients");
+
+        SwingUtilities.invokeAndWait(() -> NetworkGameplayTests.press(boards[1], "RIGHT"));
+        waitFor(() -> matchesBoth(boards, rightOfGhost, ghostY, colors[1]), "second input moves Ghost in both clients");
+    }
+
+    private static boolean matchesBoth(JComponent[] boards, int x, int y, int color) {
+        return NetworkGameplayTests.pixel(boards[0], x, y) == color
+                && NetworkGameplayTests.pixel(boards[1], x, y) == color;
     }
 
     private static void click(ConnectionWindow window, String text) throws Exception {
