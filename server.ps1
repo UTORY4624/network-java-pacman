@@ -43,6 +43,8 @@ try {
             if ($LASTEXITCODE -ne 0) { throw 'Game state tests failed.' }
             & java @javaOptions '-Djava.awt.headless=true' -ea -cp $testClasspath pacman.server.GameplayTests
             if ($LASTEXITCODE -ne 0) { throw 'Gameplay tests failed.' }
+            & java @javaOptions '-Djava.awt.headless=true' -ea -cp $testClasspath pacman.server.RoundResultTests
+            if ($LASTEXITCODE -ne 0) { throw 'Round result tests failed.' }
             & java @javaOptions '-Djava.awt.headless=true' -ea -cp $testClasspath pacman.server.DetectionTests
             if ($LASTEXITCODE -ne 0) { throw 'Detection tests failed.' }
             & java @javaOptions -ea -cp $testClasspath pacman.server.ServerTests
