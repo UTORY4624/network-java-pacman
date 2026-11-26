@@ -50,11 +50,11 @@ public class GameplayTests {
         s.move(2, "UP"); s.advance(1000);
         check(s.ghost.y == 0, "위쪽 맵 경계");
 
-        s = state("P;-; ;b\n");
+        s = state("P;-; ;b\n.;x;x;x\n");
         s.move(1, "RIGHT"); s.move(2, "LEFT"); s.advance(348);
         check(s.pacman.x == 0 && s.ghost.x == 1, "팩맨 문 통과 금지, 유령 허용");
 
-        s = state("P;.;o; ;b\n");
+        s = state("P;.;o; ;b\n.;x;x;x;x\n");
         s.move(1, "RIGHT"); s.advance(200);
         check(!s.pellets[0][1], "이동 후 일반 먹이 제거");
         s.advance(200);
@@ -74,11 +74,11 @@ public class GameplayTests {
         s.advance(s.powerRemainingMs);
         check(s.powerRemainingMs == 0, "파워 만료");
 
-        s = state("P;o;o; ;b\n");
+        s = state("P;o;o; ;b\n.;x;x;x;x\n");
         s.move(1, "RIGHT"); s.advance(400);
         check(s.powerRemainingMs == 5000 && !s.powerItems[0][1] && !s.powerItems[0][2], "재획득은 5초로 갱신");
 
-        s = state("P;.;b\n");
+        s = state("P;.;b\n.;x;x\n");
         s.move(1, "RIGHT"); s.advance(400);
         check(s.lives == 1 && s.pacman.x == 0 && s.ghost.x == 2, "일반 접촉 목숨 감소 및 양측 재배치");
         check("RESPAWNING".equals(s.pacman.status) && "RESPAWNING".equals(s.ghost.status), "양측 재배치 상태");
@@ -91,21 +91,21 @@ public class GameplayTests {
         s.move(1, "RIGHT"); s.advance(400);
         check(s.lives == 0, "두 번째 일반 접촉 목숨 소진");
         time = s.remainingMs; s.advance(1000);
-        check(s.lives == 0 && s.remainingMs == time && !s.move(1, "LEFT"), "목숨 소진 후 판정 중지 (#18 연결 대기)");
+        check(s.lives == 0 && s.remainingMs == time && !s.move(1, "LEFT"), "목숨 소진 후 판정 중지");
 
-        s = state("P;.;b\n");
+        s = state("P;.;b\n.;x;x\n");
         s.pacman.x = 1; s.ghost.x = 2;
         s.pacman.movementCredit = 3980; s.ghost.movementCredit = 3977;
         s.move(1, "RIGHT"); s.move(2, "LEFT"); s.advance(1);
         check(s.lives == 1, "서로 칸을 교차하는 접촉도 판정");
 
-        s = state("P;o;b\n");
+        s = state("P;o;b\n.;x;x\n");
         s.ghost.x = 1; s.move(1, "RIGHT"); s.advance(200);
         check(s.lives == 2 && "RETURNING".equals(s.ghost.status), "아이템 획득 후 접촉 순서");
 
-        s = state("P;.;b\n");
+        s = state("P;.;b\n.;x;x\n");
         s.lives = 1; s.ghost.x = 1; s.move(1, "RIGHT"); s.advance(200);
-        check(s.lives == 0 && !s.pellets[0][1], "마지막 먹이와 치명적 접촉 모두 반영 (#18 판정용)");
+        check(s.lives == 0 && !s.pellets[0][1], "먹이와 치명적 접촉 모두 반영");
         s = arena(); s.remainingMs = 2; s.advance(100);
         check(s.remainingMs == 0 && !s.move(1, "RIGHT"), "제한 시간은 0 아래로 내려가지 않음");
 
@@ -128,6 +128,7 @@ public class GameplayTests {
     private static GameState arena() throws Exception {
         StringBuilder top = new StringBuilder("P"), bottom = new StringBuilder("b");
         for (int i = 0; i < 40; i++) { top.append("; "); bottom.append("; "); }
+        bottom.setCharAt(bottom.length() - 1, '.');
         return state(top + "\n" + bottom + "\n");
     }
 

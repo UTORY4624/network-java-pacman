@@ -1,0 +1,35 @@
+name: Java tests
+on:
+  pull_request:
+  push:
+    branches: [main, codex/server-round-result]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Server, game rules and TCP tests
+        shell: pwsh
+        run: ./server.ps1 -Task test
+      - name: Swing integration tests
+        run: xvfb-run -a pwsh -NoProfile -File ./server.ps1 -Task test-ui
+      - name: Build server JAR
+        shell: pwsh
+        run: ./server.ps1 -Task build
+      - name: Compile all original Java sources
+        shell: bash
+        run: |
+          mkdir -p build/all
+          find src/java -name '*.java' > build/all-sources.txt
+          javac -encoding UTF-8 -d build/all @build/all-sources.txt
+      - name: Whitespace check
+        run: git diff --check HEAD^ HEAD

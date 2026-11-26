@@ -22,6 +22,9 @@ final class GameState {
     int powerRemainingMs;
     long sequence;
     String phase = "PLAYING";
+    private RoundResult result;
+
+    RoundResult result() { return result; }
 
     GameState(GameMap map, int roundId, long pacmanId, long ghostId) {
         this(map, roundId, pacmanId, ghostId, 4);
@@ -127,6 +130,16 @@ final class GameState {
                         pacman.requestedDirection = ghost.requestedDirection = null;
                     }
                 }
+            }
+            // 접촉까지 반영한 같은 1ms 갱신의 결과로 승패를 확정한다.
+            RoundResult outcome = RoundResult.evaluate(this);
+            if (outcome != null) {
+                result = outcome;
+                phase = "RESULT";
+                pacman.requestedDirection = ghost.requestedDirection = null;
+                pacman.movementCredit = ghost.movementCredit = 0;
+                pacman.waitRemainingMs = ghost.waitRemainingMs = 0;
+                changed = true;
             }
         }
         return changed;
