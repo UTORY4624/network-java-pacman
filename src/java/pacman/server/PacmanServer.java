@@ -31,6 +31,8 @@ public class PacmanServer implements AutoCloseable {
         return thread;
     });
     private int stateElapsedMs;
+    private int resultElapsedMs;
+    private static final int RESULT_DISPLAY_MS = 3000;
 
     public PacmanServer(String address, int port) throws IOException {
         map = GameMap.load();
@@ -176,6 +178,7 @@ public class PacmanServer implements AutoCloseable {
         long ghostId = "GHOST".equals(first.role) ? first.id : second.id;
         gameState = new GameState(map, roundId, pacmanId, ghostId);
         stateElapsedMs = 0;
+        resultElapsedMs = 0;
         broadcast(Json.object("type", "GAME_START", "roundId", roundId,
                 "phase", gameState.phase, "remainingMs", gameState.remainingMs, "players", players()));
         sendGameState();
@@ -184,12 +187,36 @@ public class PacmanServer implements AutoCloseable {
 
     private synchronized void tick() {
         if (closed || gameState == null) return;
-        boolean changed = gameState.advance(10);
+        GameState state = gameState;
+        if (state.result() != null) {
+            // 종료한 틱의 남은 시간을 쓰지 않고 결과 전송 다음 틱부터 3초를 센다.
+            resultElapsedMs += 10;
+            if (resultElapsedMs >= RESULT_DISPLAY_MS) prepareRematch();
+            return;
+        }
+        boolean changed = state.advance(10);
         stateElapsedMs += 10;
         if (changed || stateElapsedMs >= 100) {
             stateElapsedMs = 0;
             sendGameState();
         }
+        // sendGameState 중 송신 실패/퇴장으로 라운드가 중단될 수 있다.
+        if (gameState == state && state.result() != null) {
+            resultElapsedMs = 0;
+            broadcast(state.result().message(state.roundId));
+        }
+    }
+
+    private void prepareRematch() {
+        if (clients.size() != 2) return; // 퇴장 시 disconnected가 결과 대기를 취소한다.
+        for (ClientSession client : clients) {
+            client.role = "PACMAN".equals(client.role) ? "GHOST" : "PACMAN";
+            client.ready = false;
+        }
+        gameRunning = false;
+        gameState = null; // 양측이 다시 준비한 순간 새 상태를 만든다.
+        stateElapsedMs = resultElapsedMs = 0;
+        sendLobby();
     }
 
     private void sendGameState() {
@@ -204,7 +231,7 @@ public class PacmanServer implements AutoCloseable {
     }
 
     private void sendLobby() {
-        broadcast(Json.object("type", "LOBBY", "phase", gameRunning ? "PLAYING" : "LOBBY",
+        broadcast(Json.object("type", "LOBBY", "phase", gameState != null ? gameState.phase : "LOBBY",
                 "players", players()));
     }
 
@@ -232,6 +259,7 @@ public class PacmanServer implements AutoCloseable {
         connectionVersion++;
         gameRunning = false;
         gameState = null;
+        stateElapsedMs = resultElapsedMs = 0;
         for (ClientSession remaining : clients) {
             // 상대가 나가면 새 상대와 다시 준비하도록 하기
             remaining.ready = false;
@@ -254,6 +282,7 @@ public class PacmanServer implements AutoCloseable {
         ticker.shutdownNow();
         gameRunning = false;
         gameState = null;
+        stateElapsedMs = resultElapsedMs = 0;
         try {
             serverSocket.close();
         } catch (IOException e) {
