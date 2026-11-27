@@ -30,38 +30,53 @@ public class ConnectionWindow extends JFrame {
     private LobbyPanel lobby;
 
     public ConnectionWindow() {
-        super("팩맨 서버 접속");
+        super("잡아봐 · 2인 대전");
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
-        setResizable(false);
+        setResizable(true);
 
-        JPanel panel = new JPanel(new BorderLayout(0, 18));
-        panel.setBorder(BorderFactory.createEmptyBorder(22, 24, 22, 24));
-        JLabel title = new JLabel("팩맨 서버 접속");
-        title.setFont(title.getFont().deriveFont(Font.BOLD, 20));
-        panel.add(title, BorderLayout.NORTH);
+        JPanel panel = ArcadeTheme.backdrop(new BorderLayout(0, 30));
+        panel.setBorder(BorderFactory.createEmptyBorder(36, 40, 30, 40));
+        panel.setPreferredSize(new java.awt.Dimension(720, 620));
+        panel.add(ArcadeTheme.hero(false), BorderLayout.NORTH);
 
+        JPanel center = ArcadeTheme.plain(new BorderLayout(0, 18));
         JPanel fields = new JPanel(new GridBagLayout());
+        fields.setBackground(ArcadeTheme.PANEL);
+        fields.setBorder(BorderFactory.createEmptyBorder(24, 24, 24, 24));
         GridBagConstraints layout = new GridBagConstraints();
-        layout.insets = new Insets(5, 0, 5, 12);
+        layout.insets = new Insets(8, 0, 8, 16);
         layout.anchor = GridBagConstraints.WEST;
         layout.gridx = 0;
         layout.gridy = 0;
-        fields.add(new JLabel("서버 주소"), layout);
+        fields.add(ArcadeTheme.label("서버 주소", 14, ArcadeTheme.MUTED), layout);
         layout.gridy = 1;
-        fields.add(new JLabel("포트"), layout);
+        fields.add(ArcadeTheme.label("포트", 14, ArcadeTheme.MUTED), layout);
         layout.gridx = 1;
         layout.gridy = 0;
         layout.weightx = 1;
         layout.fill = GridBagConstraints.HORIZONTAL;
-        layout.insets = new Insets(5, 0, 5, 0);
+        layout.insets = new Insets(8, 0, 8, 0);
+        ArcadeTheme.style(hostField);
+        ArcadeTheme.style(portField);
         fields.add(hostField, layout);
         layout.gridy = 1;
         fields.add(portField, layout);
         layout.gridy = 2;
-        layout.insets = new Insets(12, 0, 0, 0);
+        layout.gridx = 0;
+        layout.gridwidth = 2;
+        layout.insets = new Insets(20, 0, 0, 0);
+        ArcadeTheme.button(connectButton, ArcadeTheme.YELLOW);
         fields.add(connectButton, layout);
-        panel.add(fields, BorderLayout.CENTER);
-        panel.add(statusLabel, BorderLayout.SOUTH);
+        center.add(ArcadeTheme.label("01  /  대전 서버에 접속", 18, ArcadeTheme.TEXT), BorderLayout.NORTH);
+        center.add(fields, BorderLayout.CENTER);
+        center.add(ArcadeTheme.label("서버를 실행한 친구의 IP로 접속하세요", 13, ArcadeTheme.MUTED), BorderLayout.SOUTH);
+        panel.add(center, BorderLayout.CENTER);
+        JPanel footer = ArcadeTheme.plain(new java.awt.GridLayout(0, 1, 0, 12));
+        statusLabel.setForeground(ArcadeTheme.CYAN);
+        statusLabel.setFont(new Font(Font.DIALOG, Font.PLAIN, 13));
+        footer.add(statusLabel);
+        footer.add(ArcadeTheme.label("2 PLAYERS    /    180 SECONDS    /    ONE WINNER", 11, ArcadeTheme.MUTED));
+        panel.add(footer, BorderLayout.SOUTH);
         screens.add(panel, "connect");
         setContentPane(screens);
         getRootPane().setDefaultButton(connectButton);
@@ -74,7 +89,7 @@ public class ConnectionWindow extends JFrame {
             }
         });
         pack();
-        setSize(Math.max(480, getWidth()), getHeight());
+        setMinimumSize(new java.awt.Dimension(640, 600));
         setLocationRelativeTo(null);
     }
 
