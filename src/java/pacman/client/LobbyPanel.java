@@ -36,20 +36,29 @@ final class LobbyPanel extends JPanel {
     private boolean supportsReady;
 
     LobbyPanel(long playerId, Consumer<String> send, Runnable disconnect) {
-        super(new BorderLayout(0, 16));
+        super(new BorderLayout(0, 20));
+        setBackground(ArcadeTheme.BG);
         this.playerId = playerId;
         board = new NetworkGamePanel(playerId, send);
         setBorder(BorderFactory.createEmptyBorder(22, 24, 22, 24));
 
-        JPanel lobby = new JPanel(new GridLayout(0, 1, 0, 8));
-        lobby.add(new JLabel("역할 선택과 준비"));
-        lobby.add(self);
-        lobby.add(opponent);
-        JPanel actions = new JPanel(new GridLayout(1, 0, 8, 0));
-        actions.add(pacman);
-        actions.add(ghost);
-        actions.add(ready);
-        lobby.add(actions);
+        JPanel lobby = ArcadeTheme.plain(new BorderLayout(0, 20));
+        JPanel headingCopy = ArcadeTheme.plain(new BorderLayout(0, 18));
+        headingCopy.add(ArcadeTheme.hero(true), BorderLayout.NORTH);
+        headingCopy.add(ArcadeTheme.label("역할 선택과 준비", 18, ArcadeTheme.TEXT), BorderLayout.SOUTH);
+        lobby.add(headingCopy, BorderLayout.NORTH);
+        JPanel choices = ArcadeTheme.plain(new GridLayout(1, 2, 18, 0));
+        choices.add(ArcadeTheme.roleCard(pacman, false));
+        choices.add(ArcadeTheme.roleCard(ghost, true));
+        lobby.add(choices, BorderLayout.CENTER);
+        JPanel players = ArcadeTheme.plain(new GridLayout(0, 1, 0, 12));
+        self.setForeground(ArcadeTheme.YELLOW);
+        opponent.setForeground(ArcadeTheme.CYAN);
+        players.add(self);
+        players.add(opponent);
+        ArcadeTheme.button(ready, ArcadeTheme.CYAN);
+        players.add(ready);
+        lobby.add(players, BorderLayout.SOUTH);
         screens.add(lobby, LOBBY);
 
         JPanel game = new JPanel(new BorderLayout(0, 8));
@@ -62,11 +71,18 @@ final class LobbyPanel extends JPanel {
         game.add(heading, BorderLayout.NORTH);
         game.add(board, BorderLayout.CENTER);
         screens.add(game, PLAYING);
+        screens.setOpaque(false);
+        ArcadeTheme.style(game);
+        gameTitle.setFont(new java.awt.Font(java.awt.Font.DIALOG, java.awt.Font.BOLD, 22));
+        gameTitle.setForeground(ArcadeTheme.YELLOW);
         add(screens, BorderLayout.CENTER);
 
         JPanel footer = new JPanel(new BorderLayout(0, 8));
+        footer.setOpaque(false);
+        notice.setForeground(ArcadeTheme.CYAN);
         footer.add(notice, BorderLayout.CENTER);
         JButton leave = new JButton("연결 해제");
+        ArcadeTheme.button(leave, ArcadeTheme.MUTED);
         leave.addActionListener(event -> disconnect.run());
         footer.add(leave, BorderLayout.SOUTH);
         add(footer, BorderLayout.SOUTH);
@@ -172,6 +188,10 @@ final class LobbyPanel extends JPanel {
     }
 
     private void updateButtons() {
+        pacman.putClientProperty("chosen", "PACMAN".equals(role));
+        ghost.putClientProperty("chosen", "GHOST".equals(role));
+        pacman.repaint();
+        ghost.repaint();
         boolean canChoose = inLobby && pendingRole == null && !readyPending;
         pacman.setEnabled(canChoose && !"PACMAN".equals(role));
         ghost.setEnabled(canChoose && !"GHOST".equals(role));

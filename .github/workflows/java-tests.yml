@@ -22,6 +22,16 @@ jobs:
         run: ./server.ps1 -Task test
       - name: Swing integration tests
         run: xvfb-run -a pwsh -NoProfile -File ./server.ps1 -Task test-ui
+      - name: Korean fonts for preview
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y fonts-noto-cjk
+      - name: Capture actual Swing design
+        run: xvfb-run -a java -Dfile.encoding=UTF-8 -cp build/tests/classes:build/tests/test-classes pacman.client.DesignPreview
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arcade-design-preview
+          path: build/previews/*.png
       - name: Build server JAR
         shell: pwsh
         run: ./server.ps1 -Task build
