@@ -95,7 +95,7 @@ public class ConnectionWindowTests {
             AtomicReference<Boolean> found = new AtomicReference<>(false);
             SwingUtilities.invokeAndWait(() -> {
                 for (JLabel label : find(window, JLabel.class)) {
-                    if (label.getText().equals(expected)) found.set(true);
+                    if (expected.equals(label.getText())) found.set(true);
                 }
             });
             if (found.get()) return;
